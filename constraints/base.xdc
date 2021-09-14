@@ -285,3 +285,18 @@ set_property PACKAGE_PIN AV5  [get_ports {syzygy_std0_tri_io[30]}];  # P2C_CLKN,
 set_property PACKAGE_PIN B9   [get_ports {syzygy_std0_tri_io[31]}];  # C2P_CLKN, Pin 36
 set_property IOSTANDARD LVCMOS18 [get_ports -of_objects [get_iobanks 84]];
 set_property IOSTANDARD LVCMOS18 [get_ports -of_objects [get_iobanks 87]];
+
+set_clock_groups -asynchronous \
+-group {RFADC0_CLK RFADC0_CLK_dummy} \
+-group {RFADC1_CLK RFADC1_CLK_dummy} \
+-group {RFADC1_FABCLK0 RFADC1_FABCLK1 RFADC1_FABCLK2 RFADC1_FABCLK3} \
+-group {RFADC2_CLK RFADC2_CLK_dummy} \
+-group {RFADC3_CLK RFADC3_CLK_dummy} \
+-group {RFADC3_FABCLK0 RFADC3_FABCLK1 RFADC3_FABCLK2 RFADC3_FABCLK3} \
+-group {RFDAC0_CLK RFDAC0_CLK_dummy} \
+-group {clk_pl_0} \
+-group {clk_pl_1} \
+-group {clk_pl_2} \
+-group {clk_pl_3} \
+-group {sys_clk_ddr4 mmcm_clkout0 mmcm_clkout5 mmcm_clkout6 pll_clk[0] pll_clk[0]_DIV pll_clk[1] pll_clk[1]_DIV pll_clk[2] pll_clk[2]_DIV}\
+;
