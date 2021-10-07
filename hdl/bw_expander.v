@@ -12,6 +12,6 @@ module bw_expander (
 
     assign m_axis_tdata = {{16{s_axis_tdata[95]}}, s_axis_tdata[95:48], {16{s_axis_tdata[47]}}, s_axis_tdata[47:0]};
     assign s_axis_tready = m_axis_tready;
-    assign m_axis_tvalid = m_axis_tvalid;
+    assign m_axis_tvalid = s_axis_tvalid;
 
 endmodule

@@ -21,7 +21,7 @@ module tlast_gen #(
     
     assign m_axis_tdata = s_axis_tdata;
     assign s_axis_tready = m_axis_tready;
-    assign m_axis_tvalid = m_axis_tvalid;
+    assign m_axis_tvalid = s_axis_tvalid;
 
     wire last = (counter == (packet_length - 1));
 

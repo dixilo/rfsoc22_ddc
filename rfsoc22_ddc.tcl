@@ -205,11 +205,10 @@ set ddr4_ui_rstgen [create_bd_cell -type ip -vlnv [latest_ip proc_sys_reset] ddr
 
 set interconnect_ddr4 [ create_bd_cell -type ip -vlnv [latest_ip axi_interconnect] interconnect_ddr4 ]
 set_property -dict [ list \
-    CONFIG.NUM_SI {3} \
+    CONFIG.NUM_SI {2} \
     CONFIG.NUM_MI {1} \
     CONFIG.S00_HAS_DATA_FIFO {2} \
     CONFIG.S01_HAS_DATA_FIFO {2} \
-    CONFIG.S02_HAS_DATA_FIFO {2} \
 ] $interconnect_ddr4
 
 ### DDR4 clock preparation
@@ -276,6 +275,7 @@ set pin0_lmk_reset [create_bd_cell -type ip -vlnv [latest_ip xlslice] pin0_lmk_r
 ## DMA
 set axi_dma [create_bd_cell -type ip -vlnv [latest_ip axi_dma] axi_dma]
 set_property -dict [list \
+    CONFIG.c_include_sg {0} \
     CONFIG.c_sg_length_width {20} \
     CONFIG.c_sg_include_stscntrl_strm {0} \
     CONFIG.c_include_mm2s {0} \
@@ -468,8 +468,7 @@ connect_bd_net -net $ddr4_ui_clk [get_bd_pins axis_data_fifo/m_axis_aclk]
 connect_bd_net -net $stream_resetn [get_bd_pins axis_data_fifo/s_axis_aresetn]
 
 # DMA
-connect_bd_intf_net [get_bd_intf_pins axi_dma/M_AXI_SG] [get_bd_intf_pins interconnect_ddr4/S01_AXI]
-connect_bd_intf_net [get_bd_intf_pins axi_dma/M_AXI_S2MM] [get_bd_intf_pins interconnect_ddr4/S02_AXI]
+connect_bd_intf_net [get_bd_intf_pins axi_dma/M_AXI_S2MM] [get_bd_intf_pins interconnect_ddr4/S01_AXI]
 connect_bd_intf_net [get_bd_intf_pins axi_dma/S_AXI_LITE] [get_bd_intf_pins interconnect_cpu/M03_AXI]
 
 connect_bd_net -net $sys_cpu_clk [get_bd_pins axi_dma/s_axi_lite_aclk]
@@ -477,13 +476,10 @@ connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M03_ACLK]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins axi_dma/axi_resetn]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M03_ARESETN]
 
-connect_bd_net -net $ddr4_ui_clk [get_bd_pins axi_dma/m_axi_sg_aclk]
 connect_bd_net -net $ddr4_ui_clk [get_bd_pins interconnect_ddr4/S01_ACLK]
 connect_bd_net -net $ddr4_ui_clk [get_bd_pins axi_dma/m_axi_s2mm_aclk]
-connect_bd_net -net $ddr4_ui_clk [get_bd_pins interconnect_ddr4/S02_ACLK]
 
 connect_bd_net -net $ddr4_ui_resetn [get_bd_pins interconnect_ddr4/S01_ARESETN]
-connect_bd_net -net $ddr4_ui_resetn [get_bd_pins interconnect_ddr4/S02_ARESETN]
 
 # bitwidth converter
 connect_bd_intf_net [get_bd_intf_pins axis_data_fifo/M_AXIS] [get_bd_intf_pins bw_expander_0/s_axis]
@@ -506,7 +502,6 @@ connect_bd_net [get_bd_pins packet_size/gpio_io_o] [get_bd_pins tlast_gen_0/pack
 
 # Addresses
 assign_bd_address -offset 0x001000000000 -range 0x000200000000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs ddr4_0/C0_DDR4_MEMORY_MAP/C0_DDR4_ADDRESS_BLOCK] -force
-assign_bd_address -offset 0x001000000000 -range 0x000200000000 -target_address_space [get_bd_addr_spaces axi_dma/Data_SG] [get_bd_addr_segs ddr4_0/C0_DDR4_MEMORY_MAP/C0_DDR4_ADDRESS_BLOCK] -force
 assign_bd_address -offset 0x001000000000 -range 0x000200000000 -target_address_space [get_bd_addr_spaces axi_dma/Data_S2MM] [get_bd_addr_segs ddr4_0/C0_DDR4_MEMORY_MAP/C0_DDR4_ADDRESS_BLOCK] -force
 
 assign_bd_address -offset 0x80050000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs pin_control/S_AXI/Reg] -force
