@@ -15,6 +15,7 @@ set_property board_part $p_board [current_project]
 add_files -norecurse -fileset sources_1 {\
     "./hdl/bw_expander.v" \
     "./hdl/tlast_gen.v" \
+    "./hdl/sync_cdc.v" \
 }
 
 #add_files -norecurse -fileset sources_1 {\
@@ -78,6 +79,13 @@ set vin0_01 [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:diff_an
 set vin2_01 [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:diff_analog_io_rtl:1.0 vin2_01 ]
 set vout00 [ create_bd_intf_port -mode Master -vlnv xilinx.com:interface:diff_analog_io_rtl:1.0 vout00 ]
 set vout10 [ create_bd_intf_port -mode Master -vlnv xilinx.com:interface:diff_analog_io_rtl:1.0 vout10 ]
+
+set pl_sysref [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:diff_clock_rtl:1.0 pl_sysref ]
+set fpga_refclk_in [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:diff_clock_rtl:1.0 fpga_refclk_in ]
+set_property -dict [ list \
+    CONFIG.FREQ_HZ {122880000} \
+] $fpga_refclk_in
+
 
 
 # Create ports
@@ -211,6 +219,29 @@ set_property -dict [ list \
     CONFIG.S01_HAS_DATA_FIFO {2} \
 ] $interconnect_ddr4
 
+### FPGA REFCLK preparation
+set util_ds_buf_refclk [create_bd_cell -type ip -vlnv [latest_ip util_ds_buf] util_ds_buf_refclk ]
+set_property -dict [ list \
+    CONFIG.C_BUF_TYPE {IBUFDS} \
+] $util_ds_buf_refclk
+
+set c_clk_mmcm_256 [create_bd_cell -type ip -vlnv [latest_ip clk_wiz] c_clk_mmcm_256]
+set_property -dict [list CONFIG.PRIM_IN_FREQ.VALUE_SRC USER] $c_clk_mmcm_256
+set_property -dict [list \
+    CONFIG.OPTIMIZE_CLOCKING_STRUCTURE_EN {true} \
+    CONFIG.PRIM_IN_FREQ {122.88} \
+    CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {256} \
+    CONFIG.CLKIN1_JITTER_PS {81.38} \
+    CONFIG.MMCM_DIVCLK_DIVIDE {12} \
+    CONFIG.MMCM_CLKFBOUT_MULT_F {115.625} \
+    CONFIG.MMCM_CLKIN1_PERIOD {8.138} \
+    CONFIG.MMCM_CLKIN2_PERIOD {10.0} \
+    CONFIG.MMCM_CLKOUT0_DIVIDE_F {4.625} \
+    CONFIG.CLKOUT1_JITTER {191.296} \
+    CONFIG.CLKOUT1_PHASE_ERROR {360.233} \
+] $c_clk_mmcm_256
+
+
 ### DDR4 clock preparation
 set util_ds_buf_0 [create_bd_cell -type ip -vlnv [latest_ip util_ds_buf] util_ds_buf_0 ]
 set_property -dict [ list \
@@ -304,6 +335,10 @@ set_property -dict [ list \
     CONFIG.C_GPIO_WIDTH {32} \
 ] $packet_size
 
+## PL SYSREF
+set sysref_buf [create_bd_cell -type ip -vlnv [latest_ip util_ds_buf] sysref_buf]
+set sysref_sync [create_bd_cell -type module -reference sync_cdc sysref_sync]
+
 
 ## connection
 ################### interface
@@ -330,7 +365,7 @@ connect_bd_net -net $pl_resetn [get_bd_pins zynq_ultra_ps_e_0/pl_resetn0]
 
 ###### 256 MHz clock
 set stream_clk [create_bd_net stream_clk]
-connect_bd_net -net $stream_clk [get_bd_pins rfdc/clk_dac0]
+connect_bd_net -net $stream_clk [get_bd_pins c_clk_mmcm_256/clk_out1]
 
 set stream_resetn [create_bd_net stream_resetn]
 connect_bd_net -net $stream_resetn [get_bd_pins stream_rstgen/peripheral_aresetn]
@@ -377,6 +412,11 @@ connect_bd_intf_net [get_bd_intf_pins zynq_ultra_ps_e_0/M_AXI_HPM0_LPD] [get_bd_
 connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M00_AXI] [get_bd_intf_pins ddc_oct/s00_axi]
 
 connect_bd_net -net $sys_cpu_clk [get_bd_pins zynq_ultra_ps_e_0/maxihpm0_lpd_aclk]
+
+# Device clock
+connect_bd_intf_net [get_bd_intf_ports fpga_refclk_in] [get_bd_intf_pins util_ds_buf_refclk/CLK_IN_D]
+connect_bd_net [get_bd_pins util_ds_buf_refclk/IBUF_OUT] [get_bd_pins c_clk_mmcm_256/clk_in1]
+
 
 # DDR4
 connect_bd_intf_net [get_bd_intf_ports ddr4_pl] [get_bd_intf_pins ddr4_0/C0_DDR4]
@@ -432,6 +472,7 @@ connect_bd_net [get_bd_pins c_clk_mmcm_200_locked/Res] [get_bd_pins ddr4_0/sys_r
 
 ######## mmcm reset preparation
 connect_bd_net [get_bd_pins c_clk_mmcm_200/reset] [get_bd_pins clk_mmcm_reset/Res]
+connect_bd_net [get_bd_pins c_clk_mmcm_256/reset] [get_bd_pins clk_mmcm_reset/Res]
 connect_bd_net [get_bd_pins binary_latch_counter_0/latched] [get_bd_pins clk_mmcm_reset/Op1]
 
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins binary_latch_counter_0/resetn]
@@ -499,6 +540,12 @@ connect_bd_net -net $sys_cpu_resetn [get_bd_pins packet_size/s_axi_aresetn]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M04_ARESETN]
 connect_bd_net [get_bd_pins packet_size/gpio_io_o] [get_bd_pins tlast_gen_0/packet_length]
 
+# pl sysref
+connect_bd_net -net $stream_clk [get_bd_pins sysref_sync/dest_clk]
+connect_bd_intf_net [get_bd_intf_ports pl_sysref] [get_bd_intf_pins sysref_buf/CLK_IN_D]
+connect_bd_net [get_bd_pins sysref_buf/IBUF_OUT] [get_bd_pins sysref_sync/src_in]
+connect_bd_net [get_bd_pins sysref_sync/dest_out] [get_bd_pins rfdc/user_sysref_adc]
+connect_bd_net [get_bd_pins sysref_sync/dest_out] [get_bd_pins rfdc/user_sysref_dac]
 
 # Addresses
 assign_bd_address -offset 0x001000000000 -range 0x000200000000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs ddr4_0/C0_DDR4_MEMORY_MAP/C0_DDR4_ADDRESS_BLOCK] -force

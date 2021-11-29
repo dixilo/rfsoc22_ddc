@@ -20,10 +20,20 @@ set_property PACKAGE_PIN AR13     [get_ports "syzygy_vio_en[0]"]
 set_property IOSTANDARD LVCMOS18  [get_ports "syzygy_vio_en[0]"]
 
 ## lmk4832 clocks - 16MHz, 122.88MHz
-set_property PACKAGE_PIN AN11 [get_ports "lmk_clk1_clk_p"]
-set_property IOSTANDARD DIFF_HSTL_I_12 [get_ports "lmk_clk1_clk_p"]
-set_property PACKAGE_PIN AP18 [get_ports "lmk_clk2_clk_p"]
-set_property IOSTANDARD DIFF_HSTL_I_12 [get_ports "lmk_clk2_clk_p"]
+#set_property PACKAGE_PIN AN11 [get_ports "lmk_clk1_clk_p"]
+#set_property IOSTANDARD DIFF_HSTL_I_12 [get_ports "lmk_clk1_clk_p"]
+#set_property PACKAGE_PIN AP18 [get_ports "lmk_clk2_clk_p"]
+#set_property IOSTANDARD DIFF_HSTL_I_12 [get_ports "lmk_clk2_clk_p"]
+
+set_property PACKAGE_PIN AN11 [get_ports "fpga_refclk_in_clk_p"]
+set_property PACKAGE_PIN AP11 [get_ports "fpga_refclk_in_clk_n"]
+set_property IOSTANDARD DIFF_HSTL_I_12 [get_ports "fpga_refclk_in_clk_p"]
+set_property IOSTANDARD DIFF_HSTL_I_12 [get_ports "fpga_refclk_in_clk_n"]
+
+set_property PACKAGE_PIN AP18 [get_ports "pl_sysref_clk_p"]
+set_property PACKAGE_PIN AR18 [get_ports "pl_sysref_clk_n"]
+set_property IOSTANDARD DIFF_HSTL_I_12 [get_ports "pl_sysref_clk_p"]
+set_property IOSTANDARD DIFF_HSTL_I_12 [get_ports "pl_sysref_clk_n"]
 
 ## display port
 set_property PACKAGE_PIN AF19     [get_ports "dp_aux_data_in"]
@@ -298,5 +308,6 @@ set_clock_groups -asynchronous \
 -group {clk_pl_1} \
 -group {clk_pl_2} \
 -group {clk_pl_3} \
+-group {system_i/c_clk_mmcm_256/inst/clk_in1 clk_out1_system_c_clk_mmcm_256_0} \
 -group {sys_clk_ddr4 mmcm_clkout0 mmcm_clkout5 mmcm_clkout6 pll_clk[0] pll_clk[0]_DIV pll_clk[1] pll_clk[1]_DIV pll_clk[2] pll_clk[2]_DIV}\
 ;
