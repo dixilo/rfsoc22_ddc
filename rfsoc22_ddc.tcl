@@ -289,7 +289,7 @@ set sys_rstgen [create_bd_cell -type ip -vlnv [latest_ip proc_sys_reset] sys_rst
 
 set interconnect_cpu [ create_bd_cell -type ip -vlnv [latest_ip axi_interconnect] interconnect_cpu ]
 set_property -dict [ list \
-    CONFIG.NUM_MI {5} \
+    CONFIG.NUM_MI {6} \
     CONFIG.S00_HAS_DATA_FIFO {2} \
 ] $interconnect_cpu
 
@@ -317,6 +317,9 @@ set_property -dict [list \
 set axis_data_fifo [create_bd_cell -type ip -vlnv [latest_ip axis_data_fifo] axis_data_fifo]
 set_property -dict [list CONFIG.IS_ACLK_ASYNC {1}] $axis_data_fifo
 
+set datafifo_rstgen [create_bd_cell -type ip -vlnv [latest_ip proc_sys_reset] datafifo_rstgen]
+set_property -dict [list CONFIG.C_AUX_RESET_HIGH.VALUE_SRC USER] $datafifo_rstgen
+
 ## bit width expander
 create_bd_cell -type module -reference bw_expander bw_expander_0
 set_property CONFIG.FREQ_HZ 300000000 [get_bd_intf_pins /bw_expander_0/s_axis]
@@ -334,6 +337,17 @@ set_property -dict [ list \
     CONFIG.C_DOUT_DEFAULT {0x00000004} \
     CONFIG.C_GPIO_WIDTH {32} \
 ] $packet_size
+
+## FIFO reset GPIO
+set fifo_reset [ create_bd_cell -type ip -vlnv [latest_ip axi_gpio] fifo_reset]
+set_property -dict [ list \
+    CONFIG.C_ALL_OUTPUTS {1} \
+    CONFIG.C_DOUT_DEFAULT {0x00000000} \
+    CONFIG.C_GPIO_WIDTH {32} \
+] $fifo_reset
+
+## FIFO reset slice
+create_bd_cell -type ip -vlnv [latest_ip xlslice] fs_slice
 
 ## PL SYSREF
 set sysref_buf [create_bd_cell -type ip -vlnv [latest_ip util_ds_buf] sysref_buf]
@@ -479,6 +493,8 @@ connect_bd_net -net $sys_cpu_resetn [get_bd_pins binary_latch_counter_0/resetn]
 connect_bd_net -net $sys_cpu_clk [get_bd_pins binary_latch_counter_0/clk]
 
 
+
+
 # DDC
 connect_bd_net -net $stream_clk [get_bd_pins ddc_oct/s_axis_aclk]
 connect_bd_net -net $stream_resetn [get_bd_pins ddc_oct/s_axis_aresetn]
@@ -506,7 +522,16 @@ connect_bd_net [get_bd_ports lmk_reset] [get_bd_pins pin0_lmk_reset/Dout]
 connect_bd_intf_net [get_bd_intf_pins ddc_oct/m_axis_ddc] [get_bd_intf_pins axis_data_fifo/S_AXIS]
 connect_bd_net -net $stream_clk [get_bd_pins axis_data_fifo/s_axis_aclk]
 connect_bd_net -net $ddr4_ui_clk [get_bd_pins axis_data_fifo/m_axis_aclk]
-connect_bd_net -net $stream_resetn [get_bd_pins axis_data_fifo/s_axis_aresetn]
+## Data fifo reset 
+## This is a dedicated reset generator for AXIS data fifo to enable reset without interfering other components.
+set datafifo_resetn [create_bd_net datafifo_resetn]
+connect_bd_net -net $datafifo_resetn [get_bd_pins datafifo_rstgen/peripheral_aresetn]
+connect_bd_net -net $ddr4_ui_clk     [get_bd_pins datafifo_rstgen/slowest_sync_clk]
+connect_bd_net -net $pl_resetn       [get_bd_pins datafifo_rstgen/ext_reset_in]
+connect_bd_net [get_bd_pins fifo_reset/gpio_io_o] [get_bd_pins fs_slice/Din]
+connect_bd_net [get_bd_pins fs_slice/Dout] [get_bd_pins datafifo_rstgen/aux_reset_in]
+
+connect_bd_net -net $datafifo_resetn [get_bd_pins axis_data_fifo/s_axis_aresetn]
 
 # DMA
 connect_bd_intf_net [get_bd_intf_pins axi_dma/M_AXI_S2MM] [get_bd_intf_pins interconnect_ddr4/S01_AXI]
@@ -529,7 +554,7 @@ connect_bd_intf_net [get_bd_intf_pins tlast_gen_0/m_axis] [get_bd_intf_pins axi_
 
 # tlast generator
 connect_bd_net -net $ddr4_ui_clk [get_bd_pins tlast_gen_0/s_axis_aclk]
-connect_bd_net -net $ddr4_ui_resetn [get_bd_pins tlast_gen_0/s_axis_aresetn]
+connect_bd_net -net $datafifo_resetn [get_bd_pins tlast_gen_0/s_axis_aresetn]
 
 # Packet size GPIO
 connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M04_AXI] [get_bd_intf_pins packet_size/S_AXI]
@@ -539,6 +564,13 @@ connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M04_ACLK]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins packet_size/s_axi_aresetn]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M04_ARESETN]
 connect_bd_net [get_bd_pins packet_size/gpio_io_o] [get_bd_pins tlast_gen_0/packet_length]
+
+# FIFO reset GPIO
+connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M05_AXI] [get_bd_intf_pins fifo_reset/S_AXI]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins fifo_reset/s_axi_aclk]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M05_ACLK]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins fifo_reset/s_axi_aresetn]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M05_ARESETN]
 
 # pl sysref
 connect_bd_net -net $stream_clk [get_bd_pins sysref_sync/dest_clk]
@@ -555,6 +587,7 @@ assign_bd_address -offset 0x80050000 -range 0x00010000 -target_address_space [ge
 assign_bd_address -offset 0x80000000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs ddc_oct/s00_axi/reg0] -force
 assign_bd_address -offset 0x80010000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_dma/S_AXI_LITE/Reg] -force
 assign_bd_address -offset 0x80020000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs packet_size/S_AXI/Reg] -force
+assign_bd_address -offset 0x80030000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs fifo_reset/S_AXI/Reg] -force
 assign_bd_address -offset 0x80080000 -range 0x00040000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs rfdc/s_axi/Reg] -force
 
 ### Project
