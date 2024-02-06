@@ -16,6 +16,7 @@ add_files -norecurse -fileset sources_1 {\
     "./hdl/bw_expander.v" \
     "./hdl/tlast_gen.v" \
     "./hdl/sync_cdc.v" \
+    "./hdl/packet_gate.v" \
 }
 
 #add_files -norecurse -fileset sources_1 {\
@@ -33,6 +34,11 @@ add_files -fileset constrs_1 -norecurse {\
 set_property  ip_repo_paths  {\
     ../axi_ddc_oct \
     ../RFSoC2x2-PYNQ/board/ip \
+    ../axi_rewind/ip_repo \
+    ../axi_rewind/hls/proj_rewind \
+    ../axi_trigger/ip_repo \
+    ../axi_trigger/hls/proj_buffer \
+    ../axi_trigger/hls/proj_trigger \
 } [current_project]
 
 #set_property ip_repo_paths $lib_dirs [current_fileset]
@@ -185,8 +191,10 @@ set_property -dict [ list \
 
 ## DDC 
 set ddc_oct [ create_bd_cell -type ip -vlnv [latest_ip axi_ddc_oct] ddc_oct ]
-set stream_rstgen [create_bd_cell -type ip -vlnv [latest_ip proc_sys_reset] stream_rstgen]
+set_property -dict [list CONFIG.N_CH {16}] $ddc_oct
 
+## Reset generator
+set stream_rstgen [create_bd_cell -type ip -vlnv [latest_ip proc_sys_reset] stream_rstgen]
 
 ## DDR4
 set ddr4_0 [ create_bd_cell -type ip -vlnv [latest_ip ip:ddr4] ddr4_0 ]
@@ -289,7 +297,7 @@ set sys_rstgen [create_bd_cell -type ip -vlnv [latest_ip proc_sys_reset] sys_rst
 
 set interconnect_cpu [ create_bd_cell -type ip -vlnv [latest_ip axi_interconnect] interconnect_cpu ]
 set_property -dict [ list \
-    CONFIG.NUM_MI {6} \
+    CONFIG.NUM_MI {14} \
     CONFIG.S00_HAS_DATA_FIFO {2} \
 ] $interconnect_cpu
 
@@ -325,6 +333,11 @@ create_bd_cell -type module -reference bw_expander bw_expander_0
 set_property CONFIG.FREQ_HZ 300000000 [get_bd_intf_pins /bw_expander_0/s_axis]
 set_property CONFIG.FREQ_HZ 300000000 [get_bd_intf_pins /bw_expander_0/m_axis]
 
+## packet gate
+create_bd_cell -type module -reference packet_gate packet_gate_0
+set_property CONFIG.FREQ_HZ 256000000 [get_bd_intf_pins /packet_gate_0/s_axis]
+set_property CONFIG.FREQ_HZ 256000000 [get_bd_intf_pins /packet_gate_0/m_axis]
+
 ## TLAST generator
 create_bd_cell -type module -reference tlast_gen tlast_gen_0
 set_property CONFIG.FREQ_HZ 300000000 [get_bd_intf_pins /tlast_gen_0/s_axis]
@@ -346,13 +359,28 @@ set_property -dict [ list \
     CONFIG.C_GPIO_WIDTH {32} \
 ] $fifo_reset
 
+set hls_reset [ create_bd_cell -type ip -vlnv [latest_ip axi_gpio] hls_reset]
+set_property -dict [ list \
+    CONFIG.C_ALL_OUTPUTS {1} \
+    CONFIG.C_DOUT_DEFAULT {0x00000000} \
+    CONFIG.C_GPIO_WIDTH {32} \
+] $hls_reset
+
 ## FIFO reset slice
 create_bd_cell -type ip -vlnv [latest_ip xlslice] fs_slice
+create_bd_cell -type ip -vlnv [latest_ip xlslice] hls_slice
 
 ## PL SYSREF
 set sysref_buf [create_bd_cell -type ip -vlnv [latest_ip util_ds_buf] sysref_buf]
 set sysref_sync [create_bd_cell -type module -reference sync_cdc sysref_sync]
 
+
+## Rewind & trigger
+set axi_rewind [ create_bd_cell -type ip -vlnv [latest_ip axi_rewind] axi_rewind]
+set axi_trigger [ create_bd_cell -type ip -vlnv [latest_ip axi_trigger] axi_trigger]
+
+set hls_rstgen [create_bd_cell -type ip -vlnv [latest_ip proc_sys_reset] hls_rstgen]
+set_property -dict [list CONFIG.C_AUX_RESET_HIGH.VALUE_SRC USER] $hls_rstgen
 
 ## connection
 ################### interface
@@ -415,12 +443,34 @@ connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/S00_ACLK]
 connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M00_ACLK]
 connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M01_ACLK]
 connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M02_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M03_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M04_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M05_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M06_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M07_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M08_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M09_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M10_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M11_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M12_ACLK]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M13_ACLK]
 
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/ARESETN]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/S00_ARESETN]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M00_ARESETN]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M01_ARESETN]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M02_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M03_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M04_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M05_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M06_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M07_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M08_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M09_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M10_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M11_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M12_ARESETN]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M13_ARESETN]
 
 connect_bd_intf_net [get_bd_intf_pins zynq_ultra_ps_e_0/M_AXI_HPM0_LPD] [get_bd_intf_pins interconnect_cpu/S00_AXI]
 connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M00_AXI] [get_bd_intf_pins ddc_oct/s00_axi]
@@ -518,8 +568,46 @@ connect_bd_net -net $sys_cpu_resetn [get_bd_pins pin_control/s_axi_aresetn]
 connect_bd_net [get_bd_pins pin0_lmk_reset/Din] [get_bd_pins pin_control/gpio_io_o]
 connect_bd_net [get_bd_ports lmk_reset] [get_bd_pins pin0_lmk_reset/Dout]
 
+# HLS reset
+set hls_resetn [create_bd_net hls_resetn]
+connect_bd_net -net $hls_resetn [get_bd_pins hls_rstgen/peripheral_aresetn]
+connect_bd_net -net $stream_clk     [get_bd_pins hls_rstgen/slowest_sync_clk]
+connect_bd_net -net $stream_resetn       [get_bd_pins hls_rstgen/ext_reset_in]
+connect_bd_net [get_bd_pins hls_reset/gpio_io_o] [get_bd_pins hls_slice/Din]
+connect_bd_net [get_bd_pins hls_slice/Dout] [get_bd_pins hls_rstgen/aux_reset_in]
+
+# packet gate
+connect_bd_net -net $stream_clk [get_bd_pins packet_gate_0/s_axis_aclk]
+connect_bd_net -net $hls_resetn [get_bd_pins packet_gate_0/s_axis_aresetn]
+connect_bd_intf_net [get_bd_intf_pins ddc_oct/m_axis_ddc] [get_bd_intf_pins packet_gate_0/s_axis]
+
+# axi_rewind
+connect_bd_net -net $stream_clk [get_bd_pins axi_rewind/dev_clk]
+connect_bd_net -net $hls_resetn [get_bd_pins axi_rewind/dev_rstn]
+connect_bd_intf_net [get_bd_intf_pins packet_gate_0/m_axis] [get_bd_intf_pins axi_rewind/axis_data_in]
+connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M06_AXI] [get_bd_intf_pins axi_rewind/axi_phase_rew]
+connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M07_AXI] [get_bd_intf_pins axi_rewind/axi_offset_real]
+connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M08_AXI] [get_bd_intf_pins axi_rewind/axi_offset_imag]
+connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M09_AXI] [get_bd_intf_pins axi_rewind/axi_phi_0]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins axi_rewind/axi_clk]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins axi_rewind/axi_aresetn]
+
+# axi_trigger
+connect_bd_net -net $stream_clk [get_bd_pins axi_trigger/dev_clk]
+connect_bd_net -net $hls_resetn [get_bd_pins axi_trigger/dev_rstn]
+connect_bd_intf_net [get_bd_intf_pins axi_rewind/axis_data_out] [get_bd_intf_pins axi_trigger/axis_data_in]
+connect_bd_intf_net [get_bd_intf_pins axi_rewind/axis_phase_out] [get_bd_intf_pins axi_trigger/axis_phase_in]
+
+connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M10_AXI] [get_bd_intf_pins axi_trigger/s_axi_trig_low]
+connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M11_AXI] [get_bd_intf_pins axi_trigger/s_axi_trig_high]
+connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M12_AXI] [get_bd_intf_pins axi_trigger/s_axi_control]
+
+connect_bd_net -net $sys_cpu_clk [get_bd_pins axi_trigger/s_axi_aclk]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins axi_trigger/axi_aresetn]
+
+
 # FIFO
-connect_bd_intf_net [get_bd_intf_pins ddc_oct/m_axis_ddc] [get_bd_intf_pins axis_data_fifo/S_AXIS]
+connect_bd_intf_net [get_bd_intf_pins axi_trigger/axis_data_out] [get_bd_intf_pins axis_data_fifo/S_AXIS]
 connect_bd_net -net $stream_clk [get_bd_pins axis_data_fifo/s_axis_aclk]
 connect_bd_net -net $ddr4_ui_clk [get_bd_pins axis_data_fifo/m_axis_aclk]
 ## Data fifo reset 
@@ -538,9 +626,7 @@ connect_bd_intf_net [get_bd_intf_pins axi_dma/M_AXI_S2MM] [get_bd_intf_pins inte
 connect_bd_intf_net [get_bd_intf_pins axi_dma/S_AXI_LITE] [get_bd_intf_pins interconnect_cpu/M03_AXI]
 
 connect_bd_net -net $sys_cpu_clk [get_bd_pins axi_dma/s_axi_lite_aclk]
-connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M03_ACLK]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins axi_dma/axi_resetn]
-connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M03_ARESETN]
 
 connect_bd_net -net $ddr4_ui_clk [get_bd_pins interconnect_ddr4/S01_ACLK]
 connect_bd_net -net $ddr4_ui_clk [get_bd_pins axi_dma/m_axi_s2mm_aclk]
@@ -556,21 +642,24 @@ connect_bd_intf_net [get_bd_intf_pins tlast_gen_0/m_axis] [get_bd_intf_pins axi_
 connect_bd_net -net $ddr4_ui_clk [get_bd_pins tlast_gen_0/s_axis_aclk]
 connect_bd_net -net $datafifo_resetn [get_bd_pins tlast_gen_0/s_axis_aresetn]
 
+
 # Packet size GPIO
 connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M04_AXI] [get_bd_intf_pins packet_size/S_AXI]
 connect_bd_net -net $sys_cpu_clk [get_bd_pins packet_size/s_axi_aclk]
-connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M04_ACLK]
-
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins packet_size/s_axi_aresetn]
-connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M04_ARESETN]
+
 connect_bd_net [get_bd_pins packet_size/gpio_io_o] [get_bd_pins tlast_gen_0/packet_length]
 
 # FIFO reset GPIO
 connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M05_AXI] [get_bd_intf_pins fifo_reset/S_AXI]
 connect_bd_net -net $sys_cpu_clk [get_bd_pins fifo_reset/s_axi_aclk]
-connect_bd_net -net $sys_cpu_clk [get_bd_pins interconnect_cpu/M05_ACLK]
 connect_bd_net -net $sys_cpu_resetn [get_bd_pins fifo_reset/s_axi_aresetn]
-connect_bd_net -net $sys_cpu_resetn [get_bd_pins interconnect_cpu/M05_ARESETN]
+
+# HLS reset GPIO
+connect_bd_intf_net [get_bd_intf_pins interconnect_cpu/M13_AXI] [get_bd_intf_pins hls_reset/S_AXI]
+connect_bd_net -net $sys_cpu_clk [get_bd_pins hls_reset/s_axi_aclk]
+connect_bd_net -net $sys_cpu_resetn [get_bd_pins hls_reset/s_axi_aresetn]
+
 
 # pl sysref
 connect_bd_net -net $stream_clk [get_bd_pins sysref_sync/dest_clk]
@@ -589,6 +678,15 @@ assign_bd_address -offset 0x80010000 -range 0x00010000 -target_address_space [ge
 assign_bd_address -offset 0x80020000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs packet_size/S_AXI/Reg] -force
 assign_bd_address -offset 0x80030000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs fifo_reset/S_AXI/Reg] -force
 assign_bd_address -offset 0x80080000 -range 0x00040000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs rfdc/s_axi/Reg] -force
+
+assign_bd_address -offset 0x800C0000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_rewind/axi_phase_rew/Reg] -force
+assign_bd_address -offset 0x800D0000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_rewind/axi_offset_real/Reg] -force
+assign_bd_address -offset 0x800E0000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_rewind/axi_offset_imag/Reg] -force
+assign_bd_address -offset 0x800F0000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_rewind/axi_phi_0/Reg] -force
+assign_bd_address -offset 0x80100000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_trigger/s_axi_control/Reg] -force
+assign_bd_address -offset 0x80110000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_trigger/s_axi_trig_high/Reg] -force
+assign_bd_address -offset 0x80120000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs axi_trigger/s_axi_trig_low/Reg] -force
+assign_bd_address -offset 0x80130000 -range 0x00010000 -target_address_space [get_bd_addr_spaces zynq_ultra_ps_e_0/Data] [get_bd_addr_segs hls_reset/S_AXI/Reg] -force
 
 ### Project
 save_bd_design
