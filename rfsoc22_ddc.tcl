@@ -33,7 +33,7 @@ add_files -fileset constrs_1 -norecurse {\
 ## IP repository
 set_property  ip_repo_paths  {\
     ../axi_ddc_oct \
-    ../RFSoC2x2-PYNQ/board/ip \
+    ../RFSoC-PYNQ/boards/ip \
     ../axi_rewind/ip_repo \
     ../axi_rewind/hls/proj_rewind \
     ../axi_trigger/ip_repo \
